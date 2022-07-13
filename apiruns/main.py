@@ -8,7 +8,7 @@ app = typer.Typer(add_completion=False)
 
 @app.command()
 def version():
-    """Get current version."""
+    """Get current version. 💬"""
     typer.echo(package_version)
 
 
@@ -19,5 +19,5 @@ def build(
         help="File configuration.",
     )
 ):
-    """Build API"""
+    """Build a API rest. 🚀"""
     Apiruns.build(file)
