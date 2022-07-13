@@ -1,0 +1,35 @@
+[tool.poetry]
+name = "apiruns"
+version = "0.0.1"
+description = "Apiruns CLI is a tool to make self-configurable rest API."
+authors = ["Jose Salas <jose.salas@apiruns.com>"]
+license = "MIT"
+readme = "README.md"
+homepage = "https://github.com/apiruns/apiruns-cli"
+repository = "https://github.com/apiruns/apiruns-cli"
+documentation = "https://github.com/apiruns/apiruns-cli"
+keywords = [
+    "Poetry",
+    "CLI",
+    "Apiruns",
+    "Packages",
+    "Packaging",
+    "Docker",
+    "No-code",
+    "Low-code",
+]
+
+[tool.poetry.dependencies]
+python = "^3.7"
+typer = {extras = ["all"], version = "^0.6.1"}
+flake8 = "^4.0.1"
+
+[tool.poetry.dev-dependencies]
+pytest = "^5.2"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry.scripts]
+apiruns = "apiruns.main:app"
