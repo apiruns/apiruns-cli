@@ -7,3 +7,6 @@ class ErrorValidatingSchema(Exception):
 
 class ErrorReadingFile(Exception):
     message = "Error reading yaml."
+
+class ErrorCreatingContainer(Exception):
+    message = "Error creating container."
