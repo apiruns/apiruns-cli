@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "apiruns"
-version = "0.0.1"
+version = "0.0.2"
 description = "Apiruns CLI is a tool to make self-configurable rest API."
 authors = ["Jose Salas <jose.salas@apiruns.com>"]
 license = "MIT"

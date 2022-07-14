@@ -84,6 +84,11 @@ class DockerClient:
 
     @classmethod
     def compose_service(cls, name: str):
+        """Build services.
+
+        Args:
+            name (str): API name.
+        """
         # Create apiruns network.
         cls._create_network()
         # Create db container.
@@ -110,11 +115,21 @@ class DockerClient:
 
 
 class APIClient:
+    """API local Client"""
 
     HOST = "http://localhost:8000"
 
     @classmethod
     def _get(cls, path: str, headers: dict) -> Tuple[None, Any]:
+        """Get method http.
+
+        Args:
+            path (str): Path name.
+            headers (dict): Headers request.
+
+        Returns:
+            Tuple[None, Any]: Json if was success else None.
+        """
         url = f"{cls.HOST}{path}"
         response = requests.get(url, headers=headers)
         if response.status_code > 299:
@@ -123,6 +138,16 @@ class APIClient:
 
     @classmethod
     def _post(cls, path: str, data: dict, headers: dict) -> Tuple[None, Any]:
+        """Post method http.
+
+        Args:
+            path (str): Path name.
+            headers (dict): Headers request.
+            data (dict): Data to send.
+
+        Returns:
+            Tuple[None, Any]: Json if was success else None.
+        """
         url = f"{cls.HOST}{path}"
         response = requests.post(url, json=data, headers=headers)
         if response.status_code > 299:
@@ -131,6 +156,7 @@ class APIClient:
 
     @classmethod
     def ping(cls) -> None:
+        """Ping to health services"""
         path = "/ping"
         while True:
             response = cls._get(path, headers={})
@@ -140,6 +166,11 @@ class APIClient:
 
     @classmethod
     def create_models(cls, model_list: list) -> None:
+        """Create models in the service.
+
+        Args:
+            model_list (list): Model list.
+        """
         path = "/admin/models"
         for m in model_list:
             cls._post(path, data=m, headers={})
