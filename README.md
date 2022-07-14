@@ -12,7 +12,7 @@ Apiruns CLI is a tool to make self-configurable rest API. Create an API rest has
 poetry install
 ```
 
-# Example
+## Example
 
 ```bash
 apiruns --help
@@ -23,7 +23,19 @@ apiruns --help
 │ --help          Show this message and exit.                                │
 ╰────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ─────────────────────────────────────────────────────────────────╮
-│ build                                   Build API                          │
-│ version                                 Get current version.               │
+│ build                                   Build a API rest. 🚀               │
+│ version                                 Get current version. 💬            │
 ╰────────────────────────────────────────────────────────────────────────────╯
+```
+
+## Crear a API Rest
+
+```bash
+apiruns build --file examples/api.yml 
+
+Building API
+Creating DB container.
+Creating API container.
+Starting services
+API listen on 8000
 ```
