@@ -19,6 +19,6 @@ class Apiruns:
         typer.echo("Building API")
         DockerClient.compose_service(api_name)
         typer.echo("Starting services")
-        APIClient.ping()
-        APIClient.create_models(data_schema)
+        #APIClient.ping()
+        #APIClient.create_models(data_schema)
         print("API listen on 8000")

@@ -1,24 +1,26 @@
 import time
-import docker
+import httpx
 from typing import Tuple, Any
-from docker.models.containers import Container
 from .exceptions import ErrorCreatingContainer
 from rich import print
 import requests
 
-_docker_client = docker.from_env()
+transport = httpx.HTTPTransport(uds="/var/run/docker.sock")
+client = httpx.Client(transport=transport)
 
 
 class DockerClient:
     """Docker Client"""
 
+    DOCKER_HOST = "http://localhost/v1.41"
+    DOCKER_HEADERS = {"Content-Type": "application/json"}
     APIRUNS_API_IMAGE = "josesalasdev/apiruns"
-    APIRUNS_API_PORTS = {"8000/tcp": 8000}
-    APIRUNS_DEFAULT_NETWORK = "apiruns"
+    APIRUNS_API_PORTS = {"8000/tcp": {}}
+    APIRUNS_DEFAULT_NETWORK = {"name": "apiruns"}
     APIRUNS_DB_IMAGE = "mongo"
-    APIRUNS_DB_NAME = "db-mongo"
-    APIRUNS_DB_PORTS = {"27017": "27017"}
-    APIRUNS_LABELS = ["apiruns_offline"]
+    APIRUNS_DB_NAME = "dbmongo"
+    APIRUNS_DB_PORTS = {"27017/tcp": {}}
+    APIRUNS_LABELS = {"name": "apiruns_offline"}
     DOCKER_STATE_RUNNING = "running"
     DOCKER_STATE_EXITED = "exited"
     APIRUNS_API_ENVS = [
@@ -31,10 +33,15 @@ class DockerClient:
     @classmethod
     def _create_network(cls) -> None:
         """Create a deafult network if no exist."""
+        create = f"{cls.DOCKER_HOST}/networks/create"
+        retrevier = f"{cls.DOCKER_HOST}/networks/apiruns"
         try:
-            _docker_client.networks.get(cls.APIRUNS_DEFAULT_NETWORK)
-        except docker.errors.NotFound:
-            _docker_client.networks.create(cls.APIRUNS_DEFAULT_NETWORK)
+            response = client.get(retrevier, headers=cls.DOCKER_HEADERS)
+            if response.status_code > 299:
+                client.post(create, json=cls.APIRUNS_DEFAULT_NETWORK, headers=cls.DOCKER_HEADERS)
+
+        except httpx.RequestError as e:
+            raise ErrorCreatingContainer
 
     @classmethod
     def _run_container(
@@ -44,7 +51,7 @@ class DockerClient:
         environment: list,
         ports: dict,
         detach: bool = False,
-    ) -> Tuple[None, Container]:
+    ) -> Tuple[None, dict]:
         """Execute a docker container.
 
         Args:
@@ -57,30 +64,35 @@ class DockerClient:
         Returns:
             Tuple[None, Container]: Container Object or None.
         """
+        url = f"{cls.DOCKER_HOST}/containers/create?name={name}"
+        data = {
+            "Image": image,
+            "NetworkingConfig": cls.APIRUNS_DEFAULT_NETWORK,
+            "Labels": cls.APIRUNS_LABELS,
+            "ExposedPorts": ports
+        }
+        if environment:
+            data["Env"] = environment
+
         try:
-            container = _docker_client.containers.run(
-                image=image,
-                name=name,
-                detach=detach,
-                network=cls.APIRUNS_DEFAULT_NETWORK,
-                environment=environment,
-                labels=cls.APIRUNS_LABELS,
-                ports=ports,
-            )
-            return container
-        except docker.errors.APIError:
+            response = client.post(url, json=data, headers=cls.DOCKER_HEADERS)
+            print(response.json())
+            if response.status_code > 299:
+                raise ErrorCreatingContainer
+            return response.json()
+        except httpx.RequestError:
             return None
 
-    @classmethod
-    def _wait(cls, container_name: str):
-        while True:
-            time.sleep(1)
-            container = _docker_client.containers.get(container_name)
-            if container and container.status == cls.DOCKER_STATE_RUNNING:
-                break
+    # @classmethod
+    # def _wait(cls, container_name: str):
+    #     while True:
+    #         time.sleep(1)
+    #         container = client.containers.get(container_name)
+    #         if container and container.status == cls.DOCKER_STATE_RUNNING:
+    #             break
 
-            if not container or container.status == cls.DOCKER_STATE_EXITED:
-                raise ErrorCreatingContainer
+    #         if not container or container.status == cls.DOCKER_STATE_EXITED:
+    #             raise ErrorCreatingContainer
 
     @classmethod
     def compose_service(cls, name: str):
@@ -100,7 +112,8 @@ class DockerClient:
             ports=cls.APIRUNS_DB_PORTS,
             detach=True
         )
-        cls._wait(d_container.name)
+        print(d_container)
+        #cls._wait(d_container.name)
 
         # Create API container.
         print("Creating API container.")
@@ -111,7 +124,8 @@ class DockerClient:
             ports=cls.APIRUNS_API_PORTS,
             detach=True
         )
-        cls._wait(api_container.name)
+        print(api_container)
+        #cls._wait(api_container.name)
 
 
 class APIClient:
