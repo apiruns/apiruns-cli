@@ -9,6 +9,10 @@ Apiruns CLI is a tool to make self-configurable rest API. Create an API rest has
 ## Installation.
 
 ```bash
+pip install apiruns
+```
+
+```bash
 poetry install
 ```
 
