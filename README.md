@@ -23,15 +23,41 @@ apiruns --help
 │ --help          Show this message and exit.                                │
 ╰────────────────────────────────────────────────────────────────────────────╯
 ╭─ Commands ─────────────────────────────────────────────────────────────────╮
-│ build                                   Build a API rest. 🚀               │
-│ version                                 Get current version. 💬            │
+│ build                       Build images & validate schema.🔧              │
+│ up                          Make your API rest. 🚀                         │
+│ version                     Get current version. 💬                        │
 ╰────────────────────────────────────────────────────────────────────────────╯
+```
+
+## file configuration
+
+Make YAML file to configure your application’s services. `api.yml`
+
+```yml
+# This is an example manifest to create microservices in apiruns.
+
+myapi: # Microservices name.
+
+  # first endpoint
+  - path: /users/ # Path name.
+    schema: # Schema of data structure.
+      username:
+        type: string
+        required: true
+      age:
+        type: integer
+        required: true
+      is_admin:
+        type: boolean
+        required: true
+      level:
+        type: string
 ```
 
 ## Crear a API Rest
 
 ```bash
-apiruns build --file examples/api.yml 
+apiruns up --file examples/api.yml 
 
 Building API
 Creating DB container.
