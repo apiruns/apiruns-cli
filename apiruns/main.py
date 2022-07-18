@@ -1,3 +1,4 @@
+from typing import Optional
 import typer
 from apiruns import __version__ as package_version
 from .services import Apiruns
@@ -14,10 +15,22 @@ def version():
 
 @app.command()
 def build(
-    file: str = typer.Option(
-        ...,
-        help="File configuration.",
+    file: Optional[str] = typer.Option(
+        "apiruns-compose.yml",
+        help="Apiruns configuration file.",
+    ),
+    version: Optional[str] = None
+):
+    """Build images & validate schema. 🔧"""
+    Apiruns.build(file, version)
+
+
+@app.command()
+def up(
+    file: Optional[str] = typer.Option(
+        "apiruns-compose.yml",
+        help="Apiruns configuration file.",
     )
 ):
-    """Build a API rest. 🚀"""
-    Apiruns.build(file)
+    """Make your API rest. 🚀"""
+    Apiruns.up(file)
