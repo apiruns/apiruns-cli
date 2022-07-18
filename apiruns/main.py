@@ -1,3 +1,4 @@
+from typing import Optional
 import typer
 from apiruns import __version__ as package_version
 from .services import Apiruns
@@ -14,8 +15,8 @@ def version():
 
 @app.command()
 def build(
-    file: str = typer.Option(
-        ...,
+    file: Optional[str] = typer.Option(
+        "apiruns-compose.yml",
         help="File configuration.",
     )
 ):

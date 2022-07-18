@@ -1,12 +1,86 @@
 import time
 import httpx
 from typing import Tuple, Any
+from .exceptions import ErrorDockerEngineAPI
+from .exceptions import ErrorCreatingNetwork
+from .exceptions import ErrorPingDocker
+from .exceptions import ErrorGettingContainerStatus
 from .exceptions import ErrorCreatingContainer
+from .exceptions import ErrorStartingAContainer
+from .exceptions import ErrorContainerExited
+from .exceptions import ErrorAPIClient
 from rich import print
 import requests
+from dataclasses import dataclass
+from dataclasses import field
+
 
 transport = httpx.HTTPTransport(uds="/var/run/docker.sock")
 client = httpx.Client(transport=transport)
+
+
+@dataclass
+class ContainerConfig:
+    """Container configuration."""
+    image: str
+    port: str
+    network_id: str
+    labels: list
+    environment: list = field(default_factory=dict)
+
+    def _build_ports(self) -> dict:
+        """Build ports.
+
+        Returns:
+            example:
+                {'8000/tcp': {}}
+        """
+        return {f"{self.port}/tcp": {}}
+
+    def _build_port_bind(self) -> dict:
+        """Build json port bind.
+
+        Returns:
+            example:
+                {'8000/tcp': [{'HostIp': '', 'HostPort': '8000'}]}
+        """
+        return {
+            f"{self.port}/tcp": [
+                {"HostIp": "", "HostPort": self.port}
+            ]
+        }
+
+    def to_json(self) -> dict:
+        """ContainerConfig to json object.
+
+        Returns:
+            dict: Json for create a container.
+            example:
+                {
+                    'Image': 'josesalasdev/apiruns',
+                    'NetworkingConfig': {
+                        'EndpointsConfig': {'apiruns': {'NetworkID': '4cb8b69e'}}
+                    },
+                    'Labels': {'name': 'apiruns_offline'},
+                    'ExposedPorts': {'8000/tcp': {}},
+                    'PortBindings': {'8000/tcp': [
+                        {'HostIp': '', 'HostPort': '8000'}
+                    ]},
+                    'Env': ['ENGINE_URI=mongodb://dbmongo:27017/']
+                }
+        """
+        data = {
+            "Image": self.image,
+            "NetworkingConfig": {
+                "EndpointsConfig": {"apiruns": {"NetworkID": self.network_id}}
+            },
+            "Labels": self.labels,
+            "ExposedPorts": self._build_ports(),
+            "PortBindings": self._build_port_bind()
+        }
+        if self.environment:
+            data["Env"] = self.environment
+        return data
 
 
 class DockerClient:
@@ -15,11 +89,11 @@ class DockerClient:
     DOCKER_HOST = "http://localhost/v1.41"
     DOCKER_HEADERS = {"Content-Type": "application/json"}
     APIRUNS_API_IMAGE = "josesalasdev/apiruns"
-    APIRUNS_API_PORTS = {"8000/tcp": {}}
+    APIRUNS_API_PORTS = "8000"
     APIRUNS_DEFAULT_NETWORK = {"name": "apiruns"}
     APIRUNS_DB_IMAGE = "mongo"
     APIRUNS_DB_NAME = "dbmongo"
-    APIRUNS_DB_PORTS = {"27017/tcp": {}}
+    APIRUNS_DB_PORTS = "27017"
     APIRUNS_LABELS = {"name": "apiruns_offline"}
     DOCKER_STATE_RUNNING = "running"
     DOCKER_STATE_EXITED = "exited"
@@ -27,21 +101,72 @@ class DockerClient:
         "PORT=8000",
         "MODULE_NAME=api.main",
         "ENGINE_DB_NAME=apiruns",
-        "ENGINE_URI=mongodb://db-mongo:27017/"
+        "ENGINE_URI=mongodb://dbmongo:27017/"
     ]
 
     @classmethod
-    def _create_network(cls) -> None:
-        """Create a deafult network if no exist."""
+    def _create_network(cls) -> str:
+        """Create default newtwork.
+
+        Raises:
+            ErrorCreatingNetwork: Error of creation.
+            ErrorDockerEngineAPI: Error of API.
+
+        Returns:
+            str: Returns network ID.
+        """
         create = f"{cls.DOCKER_HOST}/networks/create"
-        retrevier = f"{cls.DOCKER_HOST}/networks/apiruns"
+        retrieve = f"{cls.DOCKER_HOST}/networks/apiruns"
         try:
-            response = client.get(retrevier, headers=cls.DOCKER_HEADERS)
-            if response.status_code > 299:
-                client.post(create, json=cls.APIRUNS_DEFAULT_NETWORK, headers=cls.DOCKER_HEADERS)
+            response = client.get(retrieve, headers=cls.DOCKER_HEADERS)
+            if response.status_code != 200:
+                response = client.post(
+                    create,
+                    json=cls.APIRUNS_DEFAULT_NETWORK,
+                    headers=cls.DOCKER_HEADERS
+                )
+                if response.status_code != 201:
+                    raise ErrorCreatingNetwork
+                return response.json().get("Id")
+            return response.json().get("Id")
 
         except httpx.RequestError as e:
-            raise ErrorCreatingContainer
+            raise ErrorDockerEngineAPI(errors=e)
+
+    @classmethod
+    def _ping(cls) -> None:
+        """Ping to DockerEngineAPI.
+
+        Raises:
+            ErrorPingDocker: Docker API not is responding.
+        """
+        url = f"{cls.DOCKER_HOST}/_ping"
+        try:
+            response = client.get(url, headers=cls.DOCKER_HEADERS)
+            if response.status_code != 200:
+                raise ErrorPingDocker(errors=response.text)
+        except httpx.RequestError as e:
+            raise ErrorPingDocker(errors=e)
+
+    @classmethod
+    def _get_container_status(cls, _id) -> str:
+        """Get container status.
+
+        Raises:
+            ErrorGettingContainerStatus: Error getting status.
+            ErrorDockerEngineAPI: Docker API not is responding.
+
+        Returns:
+            str: Returns container status.
+        """
+        url = f"{cls.DOCKER_HOST}/containers/{_id}/json"
+        try:
+            response = client.get(url, headers=cls.DOCKER_HEADERS)
+            if response.status_code != 200:
+                raise ErrorGettingContainerStatus
+            return response.json()["State"].get("Status")
+        except httpx.RequestError as e:
+            raise ErrorDockerEngineAPI(errors=e)
 
     @classmethod
     def _run_container(
@@ -49,83 +174,117 @@ class DockerClient:
         image: str,
         name: str,
         environment: list,
-        ports: dict,
-        detach: bool = False,
-    ) -> Tuple[None, dict]:
-        """Execute a docker container.
+        port: str,
+        network_id: str,
+        labels: list
+    ) -> str:
+        """Run a container.
 
         Args:
-            image (str): Image name.
-            name (str): Container name
-            environment (list): Container Environments.
-            ports (dict): Container Ports.
-            detach (bool, optional): True if is detach. Defaults to False.
+            image (str): docker image.
+            name (str): container name.
+            environment (list): list of environment.
+            port (str): port to expose.
+            network_id (str): Network ID.
+            labels (list): List of labels.
+
+        Raises:
+            ErrorCreatingContainer: Error creating container.
+            ErrorDockerEngineAPI: Docker API not is responding.
 
         Returns:
-            Tuple[None, Container]: Container Object or None.
+            str: Container ID.
         """
         url = f"{cls.DOCKER_HOST}/containers/create?name={name}"
-        data = {
-            "Image": image,
-            "NetworkingConfig": cls.APIRUNS_DEFAULT_NETWORK,
-            "Labels": cls.APIRUNS_LABELS,
-            "ExposedPorts": ports
-        }
-        if environment:
-            data["Env"] = environment
-
+        obj = ContainerConfig(
+            image=image,
+            port=port,
+            network_id=network_id,
+            labels=labels,
+            environment=environment,
+        )
         try:
-            response = client.post(url, json=data, headers=cls.DOCKER_HEADERS)
-            print(response.json())
+            response = client.post(url, json=obj.to_json(), headers=cls.DOCKER_HEADERS)
             if response.status_code > 299:
                 raise ErrorCreatingContainer
-            return response.json()
-        except httpx.RequestError:
-            return None
+            _id = response.json().get("Id")
+            cls._start_container(_id)
+            return _id
+        except httpx.RequestError as e:
+            raise ErrorDockerEngineAPI(errors=e)
 
-    # @classmethod
-    # def _wait(cls, container_name: str):
-    #     while True:
-    #         time.sleep(1)
-    #         container = client.containers.get(container_name)
-    #         if container and container.status == cls.DOCKER_STATE_RUNNING:
-    #             break
+    @classmethod
+    def _start_container(cls, _id: str):
+        """Start a container.
 
-    #         if not container or container.status == cls.DOCKER_STATE_EXITED:
-    #             raise ErrorCreatingContainer
+        Args:
+            _id (str): Container ID.
+
+        Raises:
+            ErrorStartingAContainer: Error starting container.
+            ErrorDockerEngineAPI: Docker API not is responding.
+        """
+        url = f"{cls.DOCKER_HOST}/containers/{_id}/start"
+        try:
+            response = client.post(url, json={}, headers=cls.DOCKER_HEADERS)
+            if response.status_code != 204:
+                raise ErrorStartingAContainer
+        except httpx.RequestError as e:
+            raise ErrorDockerEngineAPI(errors=e)
+
+    @classmethod
+    def _wait(cls, container_id: str):
+        """Wait by container.
+
+        Args:
+            container_id (str): Container ID.
+
+        Raises:
+            ErrorContainerExited: Container was exited.
+        """
+        while True:
+            time.sleep(1)
+            status = cls._get_container_status(container_id)
+            if status == cls.DOCKER_STATE_RUNNING:
+                break
+
+            if status == cls.DOCKER_STATE_EXITED:
+                raise ErrorContainerExited
 
     @classmethod
     def compose_service(cls, name: str):
-        """Build services.
+        """Compose services.
 
         Args:
-            name (str): API name.
+            name (str): Service main name.
         """
+        # Ping to docker.
+        cls._ping()
         # Create apiruns network.
-        cls._create_network()
+        network = cls._create_network()
         # Create db container.
         print("Creating DB container.")
-        d_container = cls._run_container(
+        container_id = cls._run_container(
             image=cls.APIRUNS_DB_IMAGE,
             name=cls.APIRUNS_DB_NAME,
             environment={},
-            ports=cls.APIRUNS_DB_PORTS,
-            detach=True
+            port=cls.APIRUNS_DB_PORTS,
+            network_id=network,
+            labels=cls.APIRUNS_LABELS,
         )
-        print(d_container)
-        #cls._wait(d_container.name)
+        cls._wait(container_id)
 
         # Create API container.
         print("Creating API container.")
-        api_container = cls._run_container(
+        container_id = cls._run_container(
             image=cls.APIRUNS_API_IMAGE,
             name=name,
             environment=cls.APIRUNS_API_ENVS,
-            ports=cls.APIRUNS_API_PORTS,
-            detach=True
+            port=cls.APIRUNS_API_PORTS,
+            network_id=network,
+            labels=cls.APIRUNS_LABELS,
         )
-        print(api_container)
-        #cls._wait(api_container.name)
+        cls._wait(container_id)
 
 
 class APIClient:
@@ -145,10 +304,13 @@ class APIClient:
             Tuple[None, Any]: Json if was success else None.
         """
         url = f"{cls.HOST}{path}"
-        response = requests.get(url, headers=headers)
-        if response.status_code > 299:
-            return None
-        return response.json()
+        try:
+            response = requests.get(url, headers=headers)
+            if response.status_code > 299:
+                return None
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ErrorAPIClient(errors=e)
 
     @classmethod
     def _post(cls, path: str, data: dict, headers: dict) -> Tuple[None, Any]:
@@ -163,10 +325,13 @@ class APIClient:
             Tuple[None, Any]: Json if was success else None.
         """
         url = f"{cls.HOST}{path}"
-        response = requests.post(url, json=data, headers=headers)
-        if response.status_code > 299:
-            return None
-        return response.json()
+        try:
+            response = requests.post(url, json=data, headers=headers)
+            if response.status_code > 299:
+                return None
+            return response.json()
+        except requests.exceptions.RequestException as e:
+            raise ErrorAPIClient(errors=e)
 
     @classmethod
     def ping(cls) -> None:

@@ -6,15 +6,34 @@ from .exceptions import ErrorReadingFile
 from .exceptions import ErrorValidatingSchema
 
 class SerializerBase:
+    """Serialize Base"""
 
     @classmethod
     def _validate(cls, schema: dict, data: dict) -> dict:
+        """Validate schema & data.
+
+        Args:
+            schema (dict): Cerberus schema.
+            data (dict): Request data.
+
+        Returns:
+            dict: Errors.
+        """
         v = Validator(schema, purge_unknown=False)
         v.validate(data)
         return v.errors
 
 
 class FileSerializer(SerializerBase):
+    """File serializer.
+
+    Args:
+        SerializerBase (SerializerBase): Base.
+
+    Raises:
+        ErrorReadingFile: Error reading file.
+        ErrorValidatingSchema: Error validating schema.
+    """
 
     FILE_SCHEMA = {
         "path": {
@@ -44,6 +63,17 @@ class FileSerializer(SerializerBase):
 
     @classmethod
     def read_file(cls, file_path: str) -> Tuple[str, dict]:
+        """Read apiruns compose file.
+
+        Args:
+            file_path (str): Relative path.
+
+        Raises:
+            ErrorReadingFile: Error reading file.
+
+        Returns:
+            Tuple[str, dict]: _description_
+        """
         data = load_yaml(file_path)
         if not data.keys():
             raise ErrorReadingFile
@@ -54,7 +84,15 @@ class FileSerializer(SerializerBase):
 
     @classmethod
     def validate(cls, data: dict) -> None:
+        """Validate data to save.
+
+        Args:
+            data (dict): Data to save.
+
+        Raises:
+            ErrorValidatingSchema: Data isn't valid.
+        """
         for d in data:
             errors = cls._validate(cls.FILE_SCHEMA, d)
             if errors:
-                raise ErrorValidatingSchema
+                raise ErrorValidatingSchema(errors=errors)
