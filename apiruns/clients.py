@@ -9,6 +9,7 @@ from .exceptions import ErrorCreatingContainer
 from .exceptions import ErrorStartingAContainer
 from .exceptions import ErrorContainerExited
 from .exceptions import ErrorAPIClient
+from .exceptions import ErrorPullingImage
 from rich import print
 import requests
 from dataclasses import dataclass
@@ -110,7 +111,7 @@ class DockerClient:
 
         Raises:
             ErrorCreatingNetwork: Error of creation.
-            ErrorDockerEngineAPI: Error of API.
+            ErrorDockerEngineAPI: Error of Docker API.
 
         Returns:
             str: Returns network ID.
@@ -132,6 +133,46 @@ class DockerClient:
 
         except httpx.RequestError as e:
             raise ErrorDockerEngineAPI(errors=e)
+
+    @classmethod
+    def _pull_image(cls, image: str) -> None:
+        """Pull Image from docker hub.
+
+        Args:
+            image (str): Image name.
+
+        Raises:
+            ErrorPullingImage: Image not found.
+            ErrorPingDocker: Error of Docker API.
+        """
+        if not cls._get_image(image):
+            print(f"Pulling `{image}` image.")
+            url = f"{cls.DOCKER_HOST}/images/create?fromImage={image}&tag=latest"
+            try:
+                response = client.post(url, json={}, headers=cls.DOCKER_HEADERS)
+                if response.status_code != 200:
+                    raise ErrorPullingImage(errors=response.text)
+            except httpx.RequestError as e:
+                raise ErrorPingDocker(errors=e)
+
+    @classmethod
+    def _get_image(cls, image: str) -> Any:
+        """Get image info.
+
+        Args:
+            image (str): Image name.
+
+        Returns:
+            Any: Json if was success else None.
+        """
+        url = f"{cls.DOCKER_HOST}/images/{image}:latest/json"
+        try:
+            response = client.get(url, headers=cls.DOCKER_HEADERS)
+            if response.status_code != 200:
+                return None
+            return response.json()
+        except httpx.RequestError:
+            return None
 
     @classmethod
     def _ping(cls) -> None:
@@ -195,6 +236,7 @@ class DockerClient:
         Returns:
             str: Container ID.
         """
+        cls._pull_image(image)
         url = f"{cls.DOCKER_HOST}/containers/create?name={name}"
         obj = ContainerConfig(
             image=image,
@@ -208,7 +250,6 @@ class DockerClient:
             if response.status_code > 299:
                 raise ErrorCreatingContainer
             _id = response.json().get("Id")
-            cls._start_container(_id)
             return _id
         except httpx.RequestError as e:
             raise ErrorDockerEngineAPI(errors=e)
@@ -252,11 +293,12 @@ class DockerClient:
                 raise ErrorContainerExited
 
     @classmethod
-    def compose_service(cls, name: str):
+    def compose_service(cls, name: str, start: bool):
         """Compose services.
 
         Args:
             name (str): Service main name.
+            start (bool): Start services.
         """
         # Ping to docker.
         cls._ping()
@@ -272,7 +314,9 @@ class DockerClient:
             network_id=network,
             labels=cls.APIRUNS_LABELS,
         )
-        cls._wait(container_id)
+        if start:
+            cls._start_container(container_id)
+            cls._wait(container_id)
 
         # Create API container.
         print("Creating API container.")
@@ -284,7 +328,9 @@ class DockerClient:
             network_id=network,
             labels=cls.APIRUNS_LABELS,
         )
-        cls._wait(container_id)
+        if start:
+            cls._start_container(container_id)
+            cls._wait(container_id)
 
 
 class APIClient:

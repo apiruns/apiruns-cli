@@ -59,6 +59,12 @@ class ErrorContainerExited(Exception):
         self.message = "There is a container exited."
         self.errors = errors
 
+class ErrorPullingImage(Exception):
+    """Error pulling image."""
+    def __init__(self, errors: str = None):
+        self.message = "Error pulling image."
+        self.errors = errors
+
 # Apiruns client
 
 class ErrorAPIClient(Exception):
