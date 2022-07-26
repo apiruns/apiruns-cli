@@ -34,3 +34,14 @@ def up(
 ):
     """Make your API rest. 🚀"""
     Apiruns.up(file)
+
+
+@app.command()
+def down(
+    file: Optional[str] = typer.Option(
+        "apiruns-compose.yml",
+        help="Apiruns configuration file.",
+    )
+):
+    """Stops containers and removes containers. 🌪"""
+    Apiruns.down(file)
