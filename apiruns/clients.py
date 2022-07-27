@@ -10,6 +10,8 @@ from .exceptions import ErrorStartingAContainer
 from .exceptions import ErrorContainerExited
 from .exceptions import ErrorAPIClient
 from .exceptions import ErrorPullingImage
+from .exceptions import ErrorListingContainers
+from .exceptions import ErrorDeletingContainers
 from rich import print
 import requests
 from dataclasses import dataclass
@@ -95,7 +97,7 @@ class DockerClient:
     APIRUNS_DB_IMAGE = "mongo"
     APIRUNS_DB_NAME = "dbmongo"
     APIRUNS_DB_PORTS = "27017"
-    APIRUNS_LABELS = {"name": "apiruns_offline"}
+    APIRUNS_LABEL = "apiruns_offline"
     DOCKER_STATE_RUNNING = "running"
     DOCKER_STATE_EXITED = "exited"
     APIRUNS_API_ENVS = [
@@ -210,6 +212,40 @@ class DockerClient:
             raise ErrorDockerEngineAPI(errors=e)
 
     @classmethod
+    def _list_containers_by_name(cls, name: str) -> list:
+        """List containers by service name.
+
+        Args:
+            name (str): API name.
+
+        Raises:
+            ErrorListingContainers: Error listing containers.
+            ErrorDockerEngineAPI: Docker API not is responding.
+
+        Returns:
+            list: Container list.
+        """
+        label = f"{cls.APIRUNS_LABEL}-{name}"
+        url = f"{cls.DOCKER_HOST}/containers/json?label={label}"
+        try:
+            response = client.get(url, headers=cls.DOCKER_HEADERS)
+            if response.status_code != 200:
+                raise ErrorListingContainers
+            return response.json()
+        except httpx.RequestError as e:
+            raise ErrorDockerEngineAPI(errors=e)
+
+    @classmethod
+    def _delete_container(cls, _id: str):
+        url = f"{cls.DOCKER_HOST}/containers/{_id}?force=true"
+        try:
+            response = client.delete(url, headers=cls.DOCKER_HEADERS)
+            if response.status_code != 204:
+                raise ErrorDeletingContainers
+        except httpx.RequestError as e:
+            raise ErrorDockerEngineAPI(errors=e)
+
+    @classmethod
     def _run_container(
         cls,
         image: str,
@@ -293,6 +329,19 @@ class DockerClient:
                 raise ErrorContainerExited
 
     @classmethod
+    def _build_labels(cls, name: str) -> dict:
+        """Build docker labels.
+
+        Args:
+            name (str): API name.
+
+        Returns:
+            dict: Labels.
+        """
+        lable = f"{cls.APIRUNS_LABEL}-{name}"
+        return {"name": lable}
+
+    @classmethod
     def compose_service(cls, name: str, start: bool):
         """Compose services.
 
@@ -304,6 +353,8 @@ class DockerClient:
         cls._ping()
         # Create apiruns network.
         network = cls._create_network()
+        # Create labels
+        labels = cls._build_labels(name)
         # Create db container.
         print("Creating DB container.")
         container_id = cls._run_container(
@@ -312,7 +363,7 @@ class DockerClient:
             environment={},
             port=cls.APIRUNS_DB_PORTS,
             network_id=network,
-            labels=cls.APIRUNS_LABELS,
+            labels=labels,
         )
         if start:
             cls._start_container(container_id)
@@ -326,11 +377,23 @@ class DockerClient:
             environment=cls.APIRUNS_API_ENVS,
             port=cls.APIRUNS_API_PORTS,
             network_id=network,
-            labels=cls.APIRUNS_LABELS,
+            labels=labels,
         )
         if start:
             cls._start_container(container_id)
             cls._wait(container_id)
+
+    @classmethod
+    def service_down(cls, name: str):
+        """Service down.
+
+        Args:
+            name (str): Service name.
+        """
+        containers = cls._list_containers_by_name(name)
+        for c in containers:
+            print(f"Removing {c['Names']}")
+            cls._delete_container(c["Id"])
 
 
 class APIClient:

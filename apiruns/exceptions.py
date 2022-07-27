@@ -59,6 +59,18 @@ class ErrorContainerExited(Exception):
         self.message = "There is a container exited."
         self.errors = errors
 
+class ErrorListingContainers(Exception):
+    """Error listing containers."""
+    def __init__(self, errors: str = None):
+        self.message = "Error listing containers."
+        self.errors = errors
+
+class ErrorDeletingContainers(Exception):
+    """Error deleting containers."""
+    def __init__(self, errors: str = None):
+        self.message = "Error deleting containers."
+        self.errors = errors
+
 class ErrorPullingImage(Exception):
     """Error pulling image."""
     def __init__(self, errors: str = None):

@@ -1,7 +1,6 @@
 from .serializers import FileSerializer
 from .clients import DockerClient
 from .clients import APIClient
-from rich import print
 import typer
 
 class Apiruns:
@@ -35,4 +34,14 @@ class Apiruns:
         typer.echo("Starting services")
         APIClient.ping()
         APIClient.create_models(data_schema)
-        print("API listen on 8000")
+        typer.echo("API listen on 8000")
+
+    @classmethod
+    def down(cls, file_path: str):
+        """Down service.
+
+        Args:
+            file_path (str): Relative file path.
+        """
+        api_name, _ = FileSerializer.read_file(file_path)
+        DockerClient.service_down(api_name)
