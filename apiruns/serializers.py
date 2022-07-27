@@ -83,11 +83,11 @@ class FileSerializer(SerializerBase):
         return api_name, data.get(api_name)
 
     @classmethod
-    def validate(cls, data: dict) -> None:
+    def validate(cls, data: list) -> None:
         """Validate data to save.
 
         Args:
-            data (dict): Data to save.
+            data (list): Data to save.
 
         Raises:
             ErrorValidatingSchema: Data isn't valid.
