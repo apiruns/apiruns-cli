@@ -16,6 +16,7 @@ from rich import print
 import requests
 from dataclasses import dataclass
 from dataclasses import field
+from .utils import encode_obj_to_url
 
 
 transport = httpx.HTTPTransport(uds="/var/run/docker.sock")
@@ -212,11 +213,11 @@ class DockerClient:
             raise ErrorDockerEngineAPI(errors=e)
 
     @classmethod
-    def _list_containers_by_name(cls, name: str) -> list:
+    def _list_containers_by_name(cls, service_name: str) -> list:
         """List containers by service name.
 
         Args:
-            name (str): API name.
+            service_name (str): API name.
 
         Raises:
             ErrorListingContainers: Error listing containers.
@@ -225,8 +226,8 @@ class DockerClient:
         Returns:
             list: Container list.
         """
-        label = f"{cls.APIRUNS_LABEL}-{name}"
-        url = f"{cls.DOCKER_HOST}/containers/json?label={label}"
+        filters = cls._build_labels_filters(service_name)
+        url = f"{cls.DOCKER_HOST}/containers/json?filters={filters}"
         try:
             response = client.get(url, headers=cls.DOCKER_HEADERS)
             if response.status_code != 200:
@@ -234,6 +235,20 @@ class DockerClient:
             return response.json()
         except httpx.RequestError as e:
             raise ErrorDockerEngineAPI(errors=e)
+
+    @classmethod
+    def _build_labels_filters(cls, service_name: str) -> str:
+        """Build labels filters
+
+        Args:
+            service_name (str): API name.
+
+        Returns:
+            str: filters encoded.
+        """
+        label = f"service={cls.APIRUNS_LABEL}-{service_name}"
+        filters = {"label": [label]}
+        return encode_obj_to_url(filters)
 
     @classmethod
     def _delete_container(cls, _id: str):
@@ -339,7 +354,7 @@ class DockerClient:
             dict: Labels.
         """
         lable = f"{cls.APIRUNS_LABEL}-{name}"
-        return {"name": lable}
+        return {"service": lable}
 
     @classmethod
     def compose_service(cls, name: str, start: bool):
