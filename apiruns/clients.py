@@ -90,7 +90,7 @@ class ContainerConfig:
 class DockerClient:
     """Docker Client"""
 
-    DOCKER_HOST = "http://localhost/v1.41"
+    DOCKER_HOST = "http://localhost"
     DOCKER_HEADERS = {"Content-Type": "application/json"}
     APIRUNS_API_IMAGE = "josesalasdev/apiruns"
     APIRUNS_API_PORTS = "8000"
