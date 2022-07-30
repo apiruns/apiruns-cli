@@ -25,6 +25,7 @@ client = httpx.Client(transport=transport)
 @dataclass
 class ContainerConfig:
     """Container configuration."""
+
     image: str
     port: str
     network_id: str
@@ -47,11 +48,7 @@ class ContainerConfig:
             example:
                 {'8000/tcp': [{'HostIp': '', 'HostPort': '8000'}]}
         """
-        return {
-            f"{self.port}/tcp": [
-                {"HostIp": "", "HostPort": self.port}
-            ]
-        }
+        return {f"{self.port}/tcp": [{"HostIp": "", "HostPort": self.port}]}
 
     def to_json(self) -> dict:
         """ContainerConfig to json object.
@@ -79,7 +76,7 @@ class ContainerConfig:
             },
             "Labels": self.labels,
             "ExposedPorts": self._build_ports(),
-            "PortBindings": self._build_port_bind()
+            "PortBindings": self._build_port_bind(),
         }
         if self.environment:
             data["Env"] = self.environment
@@ -104,7 +101,7 @@ class DockerClient:
         "PORT=8000",
         "MODULE_NAME=api.main",
         "ENGINE_DB_NAME=apiruns",
-        "ENGINE_URI=mongodb://dbmongo:27017/"
+        "ENGINE_URI=mongodb://dbmongo:27017/",
     ]
 
     @classmethod
@@ -124,9 +121,7 @@ class DockerClient:
             response = client.get(retrieve, headers=cls.DOCKER_HEADERS)
             if response.status_code != 200:
                 response = client.post(
-                    create,
-                    json=cls.APIRUNS_DEFAULT_NETWORK,
-                    headers=cls.DOCKER_HEADERS
+                    create, json=cls.APIRUNS_DEFAULT_NETWORK, headers=cls.DOCKER_HEADERS
                 )
                 if response.status_code != 201:
                     raise ErrorCreatingNetwork
@@ -267,7 +262,7 @@ class DockerClient:
         environment: list,
         port: str,
         network_id: str,
-        labels: dict
+        labels: dict,
     ) -> str:
         """Run a container.
 
@@ -297,7 +292,7 @@ class DockerClient:
         )
         try:
             response = client.post(url, json=obj.to_json(), headers=cls.DOCKER_HEADERS)
-            if response.status_code > 299:
+            if response.status_code != 201:
                 raise ErrorCreatingContainer
             _id = response.json().get("Id")
             return _id

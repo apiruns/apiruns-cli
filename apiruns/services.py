@@ -3,8 +3,8 @@ from .clients import DockerClient
 from .clients import APIClient
 import typer
 
-class Apiruns:
 
+class Apiruns:
     @classmethod
     def build(cls, file_path: str, version: str = "0.0.1"):
         """Command to build the services.

@@ -1,9 +1,9 @@
-
 from typing import Tuple
 from cerberus import Validator
 from .utils import load_yaml
 from .exceptions import ErrorReadingFile
 from .exceptions import ErrorValidatingSchema
+
 
 class SerializerBase:
     """Serialize Base"""
@@ -49,11 +49,7 @@ class FileSerializer(SerializerBase):
             "regex": "^[a-z0-9]+(?:-[a-z0-9]+)*$",
         },
         "schema": {"type": "dict", "required": True, "empty": False, "minlength": 1},
-        "status_code": {
-            "type": "dict",
-            "required": False,
-            "empty": False
-        },
+        "status_code": {"type": "dict", "required": False, "empty": False},
         "static": {
             "type": "dict",
             "required": False,
