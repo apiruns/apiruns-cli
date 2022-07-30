@@ -1,4 +1,5 @@
 # apiruns-cli
+![flujo de trabajo de ejemplo](https://github.com/apiruns/apiruns-cli/actions/workflows/linters.yml/badge.svg)
 
 Apiruns CLI is a tool to make self-configurable rest API. Create an API rest has never been so easy.
 

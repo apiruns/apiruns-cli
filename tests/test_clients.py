@@ -120,16 +120,16 @@ class TestDockerClient:
         mock_client.side_effect = httpx.RequestError("error")
         # Asserts
         with pytest.raises(ErrorDockerEngineAPI):
-            DockerClient._create_network()
+            DockerClient._pull_image("mongo")
 
-    @patch("apiruns.clients.client.get")
+    @patch("apiruns.clients.client")
     def test_pull_image_with_image_exists(self, mock_client):
-        mock_client.return_value = MockResponse(status_code=200)
+        mock_client.get.return_value = MockResponse(status_code=200, data={"name": "mongo"})
         resp = DockerClient._pull_image("mongo")
 
         # Asserts
         assert resp == None
-        mock_client.assert_called_once_with(
+        mock_client.get.assert_called_once_with(
             "http://localhost/images/mongo:latest/json", headers=self.headers
         )
 
