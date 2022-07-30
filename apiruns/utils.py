@@ -4,6 +4,7 @@ import json
 import urllib.parse
 from pathlib import Path
 
+
 def load_yaml(path_file: str):
     """Load yaml file.
 
