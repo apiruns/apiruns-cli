@@ -1,5 +1,6 @@
 import httpx
 import pytest
+import requests
 from unittest.mock import patch, call
 from apiruns.exceptions import ErrorDockerEngineAPI
 from apiruns.exceptions import ErrorCreatingNetwork
@@ -10,8 +11,10 @@ from apiruns.exceptions import ErrorDeletingContainers
 from apiruns.exceptions import ErrorCreatingContainer
 from apiruns.exceptions import ErrorStartingAContainer
 from apiruns.exceptions import ErrorContainerExited
+from apiruns.exceptions import ErrorAPIClient
 from apiruns.clients import ContainerConfig
 from apiruns.clients import DockerClient
+from apiruns.clients import APIClient
 from dataclasses import dataclass
 from dataclasses import field
 
@@ -471,3 +474,112 @@ class TestDockerClient:
             ),
         ]
         mock_run_container.assert_has_calls(calls_containers, any_order=False)
+
+    @patch("apiruns.clients.DockerClient._delete_container")
+    @patch("apiruns.clients.DockerClient._list_containers_by_name")
+    @patch("apiruns.clients.typer.echo")
+    def test_service_down_success(
+        self,
+        mock_echo,
+        mock_list_containers,
+        mock_delete_container,
+    ):
+        # Mocks
+        mock_list_containers.return_value = [
+            {"Id": "123", "Names": ["container"]},
+            {"Id": "1234", "Names": ["container 2"]},
+        ]
+
+        # Proccess
+        DockerClient.service_down("MyAPI")
+        # Asserts
+        calls_echo = [call("Removing ['container']"), call("Removing ['container 2']")]
+        mock_echo.assert_has_calls(calls_echo, any_order=False)
+        calls_delete = [call("123"), call("1234")]
+        mock_delete_container.assert_has_calls(calls_delete, any_order=False)
+
+
+class TestAPIClient:
+    @patch("apiruns.clients.requests.get")
+    def test_get_request_with_docker_error(self, mock_client):
+        # Mocks
+        mock_client.side_effect = requests.exceptions.RequestException
+        # Asserts
+        with pytest.raises(ErrorAPIClient):
+            APIClient._get("/ping", headers={})
+
+        mock_client.assert_called_once_with("http://localhost:8000/ping", headers={})
+
+    @patch("apiruns.clients.requests.get")
+    def test_get_request_with_unsuccesful_request(self, mock_client):
+        # Mocks
+        mock_client.return_value = MockResponse(status_code=404)
+        APIClient._get("/ping", headers={})
+        # Asserts
+        mock_client.assert_called_once_with("http://localhost:8000/ping", headers={})
+
+    @patch("apiruns.clients.requests.get")
+    def test_get_request_with_succesful_request(self, mock_client):
+        # Mocks
+        mock_client.return_value = MockResponse(status_code=200)
+        response = APIClient._get("/ping", headers={})
+        # Asserts
+        mock_client.assert_called_once_with("http://localhost:8000/ping", headers={})
+        assert response == {}
+
+    @patch("apiruns.clients.requests.post")
+    def test_post_request_with_docker_error(self, mock_client):
+        # Mocks
+        mock_client.side_effect = requests.exceptions.RequestException
+        # Asserts
+        with pytest.raises(ErrorAPIClient):
+            APIClient._post("/users", data={}, headers={})
+
+        mock_client.assert_called_once_with(
+            "http://localhost:8000/users", headers={}, json={}
+        )
+
+    @patch("apiruns.clients.requests.post")
+    def test_post_request_with_unsuccesful_request(self, mock_client):
+        # Mocks
+        mock_client.return_value = MockResponse(status_code=404)
+        APIClient._post("/users", data={}, headers={})
+        # Asserts
+        mock_client.assert_called_once_with(
+            "http://localhost:8000/users", headers={}, json={}
+        )
+
+    @patch("apiruns.clients.requests.post")
+    def test_post_request_with_succesful_request(self, mock_client):
+        # Mocks
+        mock_client.return_value = MockResponse(status_code=200)
+        response = APIClient._post("/users", data={}, headers={})
+        # Asserts
+        mock_client.assert_called_once_with(
+            "http://localhost:8000/users", headers={}, json={}
+        )
+        assert response == {}
+
+    @patch("apiruns.clients.time.sleep")
+    @patch("apiruns.clients.APIClient._get")
+    def test_ping_request(self, mock_get, mock_sleep):
+        # Mocks
+        mock_get.side_effect = [None, {"status": "ok"}]
+        # Asserts
+        APIClient.ping()
+
+        calls_get = [call("/ping", headers={}), call("/ping", headers={})]
+        mock_get.assert_has_calls(calls_get, any_order=False)
+        calls_sleep = [call(1)]
+        mock_sleep.assert_has_calls(calls_sleep, any_order=False)
+
+    @patch("apiruns.clients.APIClient._post")
+    def test_create_models(self, mock_post):
+        # Asserts
+        APIClient.create_models([{"name": "anybody"}, {"name": "some"}])
+
+        calls = [
+            call("/admin/models", data={"name": "anybody"}, headers={}),
+            call("/admin/models", data={"name": "some"}, headers={}),
+        ]
+        mock_post.assert_has_calls(calls, any_order=False)
