@@ -124,7 +124,9 @@ class TestDockerClient:
 
     @patch("apiruns.clients.client")
     def test_pull_image_with_image_exists(self, mock_client):
-        mock_client.get.return_value = MockResponse(status_code=200, data={"name": "mongo"})
+        mock_client.get.return_value = MockResponse(
+            status_code=200, data={"name": "mongo"}
+        )
         resp = DockerClient._pull_image("mongo")
 
         # Asserts
@@ -290,8 +292,9 @@ class TestDockerClient:
             "http://localhost/containers/ID123?force=true", headers=self.headers
         )
 
+    @patch("apiruns.clients.DockerClient._pull_image")
     @patch("apiruns.clients.client.post")
-    def test_run_container_with_docker_error(self, mock_client):
+    def test_run_container_with_docker_error(self, mock_client, mock_pull):
         # Mocks
         mock_client.side_effect = httpx.RequestError("error")
         # Asserts
@@ -304,9 +307,11 @@ class TestDockerClient:
                 network_id="n123",
                 labels={"service": "apiruns"},
             )
+        mock_pull.assert_called_once_with("mongo")
 
+    @patch("apiruns.clients.DockerClient._pull_image")
     @patch("apiruns.clients.client.post")
-    def test_run_container_with_unsuccesful_request(self, mock_client):
+    def test_run_container_with_unsuccesful_request(self, mock_client, mock_pull):
         # Mocks
         mock_client.return_value = MockResponse(status_code=500)
         # Asserts
@@ -331,9 +336,11 @@ class TestDockerClient:
             headers=self.headers,
             json=response.to_json(),
         )
+        mock_pull.assert_called_once_with("mongo")
 
+    @patch("apiruns.clients.DockerClient._pull_image")
     @patch("apiruns.clients.client.post")
-    def test_run_container_with_success(self, mock_client):
+    def test_run_container_with_success(self, mock_client, mock_pull):
         # Mocks
         mock_client.return_value = MockResponse(status_code=201, data={"Id": "C123"})
         _id = DockerClient._run_container(
@@ -357,6 +364,7 @@ class TestDockerClient:
             headers=self.headers,
             json=response.to_json(),
         )
+        mock_pull.assert_called_once_with("mongo")
         assert _id == "C123"
 
     @patch("apiruns.clients.client.post")

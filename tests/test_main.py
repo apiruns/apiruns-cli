@@ -29,6 +29,7 @@ def test_up(service_mock):
     # Asserts
     service_mock.assert_called_once_with("myapi.yml")
 
+
 @patch("apiruns.main.Apiruns.down")
 def test_down(service_mock):
     down(file="myapi.yml")

@@ -19,7 +19,7 @@ def build(
         "apiruns-compose.yml",
         help="Apiruns configuration file.",
     ),
-    version: Optional[str] = None
+    version: Optional[str] = None,
 ):
     """Build images & validate schema. 🔧"""
     Apiruns.build(file, version)
