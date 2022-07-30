@@ -20,19 +20,13 @@ class ErrorReadingFile(Exception):
 class ErrorDockerEngineAPI(Exception):
     """Error with request to Docker Engine API."""
     def __init__(self, errors: str = None):
-        self.message = "Error with request to Docker Engine API."
+        self.message = "Docker Engine API isn't responding."
         self.errors = errors
 
 class ErrorCreatingNetwork(Exception):
     """Error creating network."""
     def __init__(self, errors: str = None):
         self.message = "Error creating network."
-        self.errors = errors
-
-class ErrorPingDocker(Exception):
-    """Docker API not responding."""
-    def __init__(self, errors: str = None):
-        self.message = "Docker API not is responding."
         self.errors = errors
 
 class ErrorGettingContainerStatus(Exception):

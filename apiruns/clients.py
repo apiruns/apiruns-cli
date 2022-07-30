@@ -1,9 +1,10 @@
 import time
 import httpx
+import typer
+import requests
 from typing import Tuple, Any
 from .exceptions import ErrorDockerEngineAPI
 from .exceptions import ErrorCreatingNetwork
-from .exceptions import ErrorPingDocker
 from .exceptions import ErrorGettingContainerStatus
 from .exceptions import ErrorCreatingContainer
 from .exceptions import ErrorStartingAContainer
@@ -12,8 +13,6 @@ from .exceptions import ErrorAPIClient
 from .exceptions import ErrorPullingImage
 from .exceptions import ErrorListingContainers
 from .exceptions import ErrorDeletingContainers
-from rich import print
-import requests
 from dataclasses import dataclass
 from dataclasses import field
 from .utils import encode_obj_to_url
@@ -29,8 +28,8 @@ class ContainerConfig:
     image: str
     port: str
     network_id: str
-    labels: list
-    environment: list = field(default_factory=dict)
+    labels: dict
+    environment: list = field(default_factory=list)
 
     def _build_ports(self) -> dict:
         """Build ports.
@@ -146,17 +145,17 @@ class DockerClient:
 
         Raises:
             ErrorPullingImage: Image not found.
-            ErrorPingDocker: Error of Docker API.
+            ErrorDockerEngineAPI: Error of Docker API.
         """
         if not cls._get_image(image):
-            print(f"Pulling `{image}` image.")
+            typer.echo(f"Pulling `{image}` image.")
             url = f"{cls.DOCKER_HOST}/images/create?fromImage={image}&tag=latest"
             try:
                 response = client.post(url, json={}, headers=cls.DOCKER_HEADERS)
                 if response.status_code != 200:
                     raise ErrorPullingImage(errors=response.text)
             except httpx.RequestError as e:
-                raise ErrorPingDocker(errors=e)
+                raise ErrorDockerEngineAPI(errors=e)
 
     @classmethod
     def _get_image(cls, image: str) -> Any:
@@ -174,23 +173,23 @@ class DockerClient:
             if response.status_code != 200:
                 return None
             return response.json()
-        except httpx.RequestError:
-            return None
+        except httpx.RequestError as e:
+            raise ErrorDockerEngineAPI(errors=e)
 
     @classmethod
     def _ping(cls) -> None:
         """Ping to DockerEngineAPI.
 
         Raises:
-            ErrorPingDocker: Docker API not is responding.
+            ErrorDockerEngineAPI: Docker API not is responding.
         """
         url = f"{cls.DOCKER_HOST}/_ping"
         try:
             response = client.get(url, headers=cls.DOCKER_HEADERS)
             if response.status_code != 200:
-                raise ErrorPingDocker(errors=response.text)
+                raise ErrorDockerEngineAPI(errors=response.text)
         except httpx.RequestError as e:
-            raise ErrorPingDocker(errors=e)
+            raise ErrorDockerEngineAPI(errors=e)
 
     @classmethod
     def _get_container_status(cls, _id) -> str:
@@ -268,7 +267,7 @@ class DockerClient:
         environment: list,
         port: str,
         network_id: str,
-        labels: list
+        labels: dict
     ) -> str:
         """Run a container.
 
@@ -278,7 +277,7 @@ class DockerClient:
             environment (list): list of environment.
             port (str): port to expose.
             network_id (str): Network ID.
-            labels (list): List of labels.
+            labels (dict): dict of labels.
 
         Raises:
             ErrorCreatingContainer: Error creating container.
@@ -371,11 +370,11 @@ class DockerClient:
         # Create labels
         labels = cls._build_labels(name)
         # Create db container.
-        print("Creating DB container.")
+        typer.echo("Creating DB container.")
         container_id = cls._run_container(
             image=cls.APIRUNS_DB_IMAGE,
             name=cls.APIRUNS_DB_NAME,
-            environment={},
+            environment=[],
             port=cls.APIRUNS_DB_PORTS,
             network_id=network,
             labels=labels,
@@ -385,7 +384,7 @@ class DockerClient:
             cls._wait(container_id)
 
         # Create API container.
-        print("Creating API container.")
+        typer.echo("Creating API container.")
         container_id = cls._run_container(
             image=cls.APIRUNS_API_IMAGE,
             name=name,
@@ -407,7 +406,7 @@ class DockerClient:
         """
         containers = cls._list_containers_by_name(name)
         for c in containers:
-            print(f"Removing {c['Names']}")
+            typer.echo(f"Removing {c['Names']}")
             cls._delete_container(c["Id"])
 
 
