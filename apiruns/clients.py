@@ -297,7 +297,7 @@ class DockerClient:
         )
         try:
             response = client.post(url, json=obj.to_json(), headers=cls.DOCKER_HEADERS)
-            if response.status_code > 299:
+            if response.status_code != 201:
                 raise ErrorCreatingContainer
             _id = response.json().get("Id")
             return _id

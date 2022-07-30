@@ -1,12 +1,15 @@
 import httpx
 import pytest
-from unittest.mock import patch
+from unittest.mock import patch, call
 from apiruns.exceptions import ErrorDockerEngineAPI
 from apiruns.exceptions import ErrorCreatingNetwork
 from apiruns.exceptions import ErrorPullingImage
 from apiruns.exceptions import ErrorGettingContainerStatus
 from apiruns.exceptions import ErrorListingContainers
 from apiruns.exceptions import ErrorDeletingContainers
+from apiruns.exceptions import ErrorCreatingContainer
+from apiruns.exceptions import ErrorStartingAContainer
+from apiruns.exceptions import ErrorContainerExited
 from apiruns.clients import ContainerConfig
 from apiruns.clients import DockerClient
 from dataclasses import dataclass
@@ -283,3 +286,188 @@ class TestDockerClient:
         mock_client.assert_called_once_with(
             "http://localhost/containers/ID123?force=true", headers=self.headers
         )
+
+    @patch("apiruns.clients.client.post")
+    def test_run_container_with_docker_error(self, mock_client):
+        # Mocks
+        mock_client.side_effect = httpx.RequestError("error")
+        # Asserts
+        with pytest.raises(ErrorDockerEngineAPI):
+            DockerClient._run_container(
+                image="mongo",
+                name="mongodb",
+                environment=["PORT=27017"],
+                port="27017",
+                network_id="n123",
+                labels={"service": "apiruns"},
+            )
+
+    @patch("apiruns.clients.client.post")
+    def test_run_container_with_unsuccesful_request(self, mock_client):
+        # Mocks
+        mock_client.return_value = MockResponse(status_code=500)
+        # Asserts
+        with pytest.raises(ErrorCreatingContainer):
+            DockerClient._run_container(
+                image="mongo",
+                name="mongodb",
+                environment=["PORT=27017"],
+                port="27017",
+                network_id="n123",
+                labels={"service": "apiruns"},
+            )
+        response = ContainerConfig(
+            image="mongo",
+            port="27017",
+            network_id="n123",
+            labels={"service": "apiruns"},
+            environment=["PORT=27017"],
+        )
+        mock_client.assert_called_once_with(
+            "http://localhost/containers/create?name=mongodb",
+            headers=self.headers,
+            json=response.to_json(),
+        )
+
+    @patch("apiruns.clients.client.post")
+    def test_run_container_with_success(self, mock_client):
+        # Mocks
+        mock_client.return_value = MockResponse(status_code=201, data={"Id": "C123"})
+        _id = DockerClient._run_container(
+            image="mongo",
+            name="mongodb",
+            environment=["PORT=27017"],
+            port="27017",
+            network_id="n123",
+            labels={"service": "apiruns"},
+        )
+        # Asserts
+        response = ContainerConfig(
+            image="mongo",
+            port="27017",
+            network_id="n123",
+            labels={"service": "apiruns"},
+            environment=["PORT=27017"],
+        )
+        mock_client.assert_called_once_with(
+            "http://localhost/containers/create?name=mongodb",
+            headers=self.headers,
+            json=response.to_json(),
+        )
+        assert _id == "C123"
+
+    @patch("apiruns.clients.client.post")
+    def test_start_container_with_docker_error(self, mock_client):
+        # Mocks
+        mock_client.side_effect = httpx.RequestError("error")
+        # Asserts
+        with pytest.raises(ErrorDockerEngineAPI):
+            DockerClient._start_container("C123")
+        mock_client.assert_called_once_with(
+            "http://localhost/containers/C123/start", headers=self.headers, json={}
+        )
+
+    @patch("apiruns.clients.client.post")
+    def test_start_container_with_unsuccesful_request(self, mock_client):
+        # Mocks
+        mock_client.return_value = MockResponse(status_code=500)
+        # Asserts
+        with pytest.raises(ErrorStartingAContainer):
+            DockerClient._start_container("C123")
+
+        mock_client.assert_called_once_with(
+            "http://localhost/containers/C123/start", headers=self.headers, json={}
+        )
+
+    @patch("apiruns.clients.client.post")
+    def test_start_container_with_success(self, mock_client):
+        # Mocks
+        mock_client.return_value = MockResponse(
+            status_code=204,
+        )
+        DockerClient._start_container("C123")
+        # Asserts
+        mock_client.assert_called_once_with(
+            "http://localhost/containers/C123/start", headers=self.headers, json={}
+        )
+
+    @patch("apiruns.clients.DockerClient._get_container_status")
+    @patch("apiruns.clients.time.sleep")
+    def test_wait_container_with_exited_status(self, mock_sleep, mock_container):
+        # Mocks
+        mock_sleep.return_value = None
+        mock_container.return_value = "exited"
+        # Asserts
+        with pytest.raises(ErrorContainerExited):
+            DockerClient._wait("C123")
+
+        mock_sleep.assert_called_once_with(1)
+        mock_container.assert_called_once_with("C123")
+
+    @patch("apiruns.clients.DockerClient._get_container_status")
+    @patch("apiruns.clients.time.sleep")
+    def test_wait_container_with_exited_status(self, mock_sleep, mock_container):
+        # Mocks
+        mock_sleep.return_value = None
+        mock_container.return_value = "running"
+        DockerClient._wait("C123")
+        # Asserts
+        mock_sleep.assert_called_once_with(1)
+        mock_container.assert_called_once_with("C123")
+
+    def test_build_labels(self):
+        # Asserts
+        resp = DockerClient._build_labels("apiruns")
+
+        assert resp == {"service": "apiruns_offline-apiruns"}
+
+    @patch("apiruns.clients.DockerClient._ping")
+    @patch("apiruns.clients.DockerClient._create_network")
+    @patch("apiruns.clients.DockerClient._start_container")
+    @patch("apiruns.clients.DockerClient._wait")
+    @patch("apiruns.clients.DockerClient._run_container")
+    @patch("apiruns.clients.typer.echo")
+    def test_compose_service_success(
+        self,
+        mock_echo,
+        mock_run_container,
+        mock_wait,
+        mock_start_container,
+        mock_create_network,
+        mock_ping,
+    ):
+        # Mocks
+        mock_create_network.return_value = "N123"
+        mock_run_container.side_effect = ["C123", "C1234"]
+
+        # Proccess
+        DockerClient.compose_service("MyAPI", start=True)
+        # Asserts
+        mock_ping.assert_called_once_with()
+        mock_create_network.assert_called_once_with()
+        calls_echo = [call("Creating DB container."), call("Creating API container.")]
+        mock_echo.assert_has_calls(calls_echo, any_order=False)
+        calls_containers = [
+            call(
+                environment=[],
+                image="mongo",
+                labels={"service": "apiruns_offline-MyAPI"},
+                name="dbmongo",
+                network_id="N123",
+                port="27017",
+            ),
+            call(
+                environment=[
+                    "PORT=8000",
+                    "MODULE_NAME=api.main",
+                    "ENGINE_DB_NAME=apiruns",
+                    "ENGINE_URI=mongodb://dbmongo:27017/",
+                ],
+                image="josesalasdev/apiruns",
+                labels={"service": "apiruns_offline-MyAPI"},
+                name="MyAPI",
+                network_id="N123",
+                port="8000",
+            ),
+        ]
+        mock_run_container.assert_has_calls(calls_containers, any_order=False)
